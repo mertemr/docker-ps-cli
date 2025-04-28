@@ -1,0 +1,7 @@
+[project]
+name = "docker-ps-cli"
+version = "1.0.0"
+description = "List your docker containers in a better way!"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []
