@@ -28,3 +28,24 @@ docker-ps-cli = "docker_ps_cli.main:main"
 
 [tool.uv]
 package = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = [".venv", "dist"]
+fix = true
+unsafe-fixes = false
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+preview = true
+
+[tool.ruff.lint]
+select = ["B","C90","E","F","I","TRY","ANN","N"]
+ignore = []
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.7",
+]
