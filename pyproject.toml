@@ -24,7 +24,7 @@ classifiers = [
 "Bug Tracker" = "https://github.com/mertemr/docker-ps-cli/issues"
 
 [project.scripts]
-docker-ps = "main:main"
+docker-ps-cli = "docker_ps_cli.main:main"
 
 [tool.uv]
 package = true
