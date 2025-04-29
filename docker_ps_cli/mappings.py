@@ -29,6 +29,7 @@ JSON_KEY_MAP = {
     "Cmd": "Command",
     "Created": "CreatedAt",
     "CreatedAt": "CreatedAt",
+    "Exit": "Status",
     "Status": "Status",
     "Ports": "Ports",
     "Port": "Ports",
@@ -54,4 +55,21 @@ HEADER_TO_FLAG_NAME_MAP = {
     "Size": "size",
     "Health": "health",
     "Labels": "label",
+}
+
+STATIC_STYLE_MAP = {
+    "Names": "bold",
+    "Ports": "magenta",
+    "Image": "blue",
+    "Command": "dim",
+    "Size": "green",
+    "Created": "dim",
+    "Labels": "dim italic",
+}
+
+ARG_MAPPING = {
+    "all": "-a",
+    "latest": "-l",
+    "no_trunc": "--no-trunc",
+    "show_size": "-s"
 }

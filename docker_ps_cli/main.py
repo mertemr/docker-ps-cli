@@ -1,261 +1,60 @@
-import fnmatch
 import json
-import logging
-import shlex
 import subprocess
 import sys
-from argparse import (
-    ArgumentParser,
-    BooleanOptionalAction,
-    RawTextHelpFormatter,
-)
-from typing import Any, List, Union
+from argparse import Namespace
 
 import rich.box
 from rich.console import Console
-from rich.logging import RichHandler
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from . import (
-    DEFAULT_COLUMNS,
-    DISPLAY_HEADERS,
-    HEADER_TO_FLAG_NAME_MAP,
-    JSON_KEY_MAP,
+    ARG_MAPPING,
+    filter_containers,
+    get_column_configs,
+    get_styled_value,
+    parser,
+    setup_logging,
 )
 
+args = parser.parse_args()
 console = Console()
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level="DEBUG",
-    format=FORMAT,
-    datefmt="[%X]",
-    handlers=[RichHandler(console=console, rich_tracebacks=True)],
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging(args.log_level, console)
 
 
-def comma_separated_list(value: str) -> List[str]:
-    """Argparse type function to split a string by comma and strip whitespace."""
-    return [item.strip() for item in value.split(",") if item.strip()]
+def build_docker_command(args: Namespace, columns: list[tuple[str, str]]) -> list[str]:
+    cmd = ["docker", "ps", "--format", "json"]
+    if args.all:
+        cmd.append("-a")
+    if args.last is not None:
+        cmd.extend(["-n", str(args.last)])
+    if args.latest:
+        cmd.append("-l")
+    if args.no_trunc:
+        cmd.append("--no-trunc")
+    if any(h == "Size" for h, _ in columns):
+        cmd.append("-s")
+    for f in args.filter or []:
+        for item in f:
+            cmd.extend(["-f", item])
+    return cmd
 
 
-def filter_containers(containers_data: List[dict], find_string: str) -> List[dict]:
-    """
-    Filters container data based on key=pattern pairs from the find string.
-    Supports glob (*) in patterns and case-insensitive substring match otherwise.
-    """
-    logger.debug(f"Applying --find filter: {find_string}")
-
-    find_conditions = []
-
+def run_docker_and_parse_json(cmd: list[str]) -> list[dict]:
     try:
-        parts = shlex.split(find_string)
-    except ValueError as e:
-        logger.error(f"Error parsing find string with shlex: {e}")
-        return containers_data
-
-    for part in parts:
-        if "=" in part:
-            key, pattern = part.split("=", 1)
-
-            actual_json_key = None
-            lower_display_to_json = {h.lower(): jk for h, jk in JSON_KEY_MAP.items()}
-            lower_json_key_to_json = {jk.lower(): jk for jk in JSON_KEY_MAP.values()}
-
-            lower_input_key = key.lower()
-            if lower_input_key in lower_display_to_json:
-                actual_json_key = lower_display_to_json[lower_input_key]
-            elif lower_input_key in lower_json_key_to_json:
-                actual_json_key = lower_json_key_to_json[lower_input_key]
-            else:
-                logger.warning(f"Find filter key '{key}' not recognized. Skipping.")
-                continue
-
-            find_conditions.append((actual_json_key, pattern))
-        else:
-            logger.warning(
-                f"Invalid find condition '{part}'. Expected format 'key=pattern'. Skipping."
-            )
-            continue
-
-    if not find_conditions:
-        logger.debug("No valid find conditions found.")
-        return containers_data
-
-    filtered_data = []
-    for container in containers_data:
-        is_match = True
-        for key, pattern in find_conditions:
-            value = container.get(key)
-            value_str = str(value) if value is not None else ""
-
-            condition_met = False
-
-            if any(c in pattern for c in "*?[]"):
-                condition_met = fnmatch.fnmatch(value_str.lower(), pattern.lower())
-            else:
-                condition_met = pattern.lower() in value_str.lower()
-
-            if not condition_met:
-                is_match = False
-                break
-
-        if is_match:
-            filtered_data.append(container)
-
-    logger.debug(f"Filtered down to {len(filtered_data)} containers.")
-    return filtered_data
+        logger.debug("Running docker command...")
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    except Exception as e:
+        console.print(
+            Panel(f"[red]Error: {e}[/red]", title="[bold red]Execution Failed[/bold red]")
+        )
+        logger.exception("Docker command failed")
+        sys.exit(1)
 
 
-def get_column_configs(args) -> List[tuple[str, str]]:
-    """
-    Determines which columns to display based on arguments (BooleanOptionalAction
-    results True/False/None and --hide-column list) and returns their
-    display headers and JSON keys.
-    """
-    logger.debug("Determining column configuration...")
-
-    explicitly_shown_headers: List[str] = []
-    explicitly_hidden_headers: List[str] = []
-    unspecified_headers: List[str] = []
-
-    for header in DISPLAY_HEADERS:
-        flag_name = HEADER_TO_FLAG_NAME_MAP.get(header, header.lower())
-
-        arg_attr_name = f"show_{flag_name}"
-        arg_value = getattr(args, arg_attr_name, None)
-
-        if arg_value is True:
-            explicitly_shown_headers.append(header)
-        elif arg_value is False:
-            explicitly_hidden_headers.append(header)
-        else:
-            unspecified_headers.append(header)
-
-    logger.debug(f"Explicitly shown: {explicitly_shown_headers}")
-    logger.debug(f"Explicitly hidden: {explicitly_hidden_headers}")
-    logger.debug(f"Unspecified flags: {unspecified_headers}")
-
-    if explicitly_shown_headers:
-        base_display_columns = list(dict.fromkeys(explicitly_shown_headers))
-        logger.debug(f"Base columns (explicitly shown): {base_display_columns}")
-    else:
-        base_display_columns = list(DEFAULT_COLUMNS)
-        logger.debug(f"Base columns (default): {base_display_columns}")
-
-    columns_to_hide_lower = {header.lower() for header in explicitly_hidden_headers}
-
-    hide_column_args_flat = (
-        [item for sublist in args.hide_column for item in sublist]
-        if args.hide_column
-        else []
-    )
-    columns_to_hide_lower.update({col.strip().lower() for col in hide_column_args_flat})
-
-    logger.debug(f"Headers to hide (lowercase): {columns_to_hide_lower}")
-
-    final_display_columns = [
-        header
-        for header in base_display_columns
-        if header.lower() not in columns_to_hide_lower
-    ]
-
-    logger.debug(f"Final display headers: {final_display_columns}")
-
-    column_configs: List[tuple[str, str]] = []
-    for header in final_display_columns:
-        json_key = JSON_KEY_MAP.get(header)
-        if json_key:
-            column_configs.append((header, json_key))
-        else:
-            logger.warning(
-                f"No JSON key mapping or data key found for display header '{header}'. Skipping column."
-            )
-
-    logger.debug(f"Final column configurations: {column_configs}")
-    return column_configs
-
-
-def get_styled_value(header: str, value: Union[str, int, None], args: Any) -> Text:
-    """
-    Returns a rich Text object with styling based on the column header and value.
-    """
-    value_str = str(value) if value is not None else ""
-
-    if header == "Status":
-        status_text = value_str.lower()
-        if "up" in status_text or "running" in status_text:
-            return Text(value_str, style="green bold")
-        elif "exited" in status_text or "dead" in status_text:
-            return Text(value_str, style="red bold")
-        elif "created" in status_text:
-            return Text(value_str, style="yellow bold")
-        elif "paused" in status_text:
-            return Text(value_str, style="blue bold")
-        elif "restarting" in status_text:
-            return Text(value_str, style="orange bold")
-        elif "removing" in status_text:
-            return Text(value_str, style="red dim")
-        else:
-            return Text(value_str, style="white dim")
-
-    elif header == "ID":
-        if args.no_trunc:
-            return Text(value_str, style="cyan")
-        else:
-            display_id = value_str
-            if len(display_id) > 12:
-                display_id = value_str[:12]
-            return Text(display_id, style="cyan")
-
-    elif header == "Names":
-        return Text(value_str, style="bold")
-    elif header == "Ports":
-        return Text(value_str, style="magenta")
-    elif header == "Image":
-        return Text(value_str, style="blue")
-    elif header == "Command":
-        return Text(value_str, style="dim")
-    elif header == "Size":
-        return Text(value_str, style="green")
-
-    elif header == "Created":
-        return Text(value_str, style="dim")
-    elif header == "Health":
-        health_text = value_str.lower() if value_str else ""
-        if "healthy" in health_text:
-            return Text(value_str, style="green bold")
-        elif "unhealthy" in health_text:
-            return Text(value_str, style="red bold")
-        elif "starting" in health_text:
-            return Text(value_str, style="yellow bold")
-        elif "N/A" in health_text or not health_text:
-            return Text(value_str if value_str else "N/A", style="dim")
-        else:
-            return Text(value_str, style="white dim")
-
-    elif header == "Labels":
-        return Text(value_str, style="dim italic")
-
-    return Text(value_str)
-
-
-def print_containers_table(containers_data: List[dict], args: Any) -> None:
-    """
-    Prints the container data using a rich table with selected columns and styling.
-    """
-    logger.debug("Preparing to print rich table...")
-
-    if not containers_data:
-        return
-
-    column_configs = get_column_configs(args)
-
-    if not column_configs:
-        return
-
+def print_containers_table(data: list[dict]) -> None:
+    columns = get_column_configs(args, logger)
     table = Table(
         header_style="bold blue",
         border_style="dim",
@@ -264,372 +63,65 @@ def print_containers_table(containers_data: List[dict], args: Any) -> None:
         expand=True,
     )
 
-    for header, json_key in column_configs:
-        justify = "left"
+    for header, _ in columns:
+        table.add_column(
+            header,
+            justify="right" if header in ["ID", "Size", "Created"] else "left",
+            max_width=80 if header in ["Command", "Labels"] else None,
+            overflow="fold",
+        )
 
-        if header in ["ID", "Size", "Created"]:
-            justify = "right"
+    if not data:
+        logger.info("No containers to display.")
+        console.print(table)
+        return
 
-        max_width = None
-        if header in ["Command", "Labels"]:
-            max_width = 80
-
-        table.add_column(header, justify=justify, max_width=max_width, overflow="fold")
-
-    for container in containers_data:
-        row_values = []
-        for header, json_key in column_configs:
-            value = container.get(json_key)
-
-            styled_text = get_styled_value(header, value, args)
-            row_values.append(styled_text)
-
-        if len(row_values) == len(column_configs):
-            table.add_row(*row_values)
-        else:
-            container_id_for_warn = container.get(JSON_KEY_MAP.get("ID"), "N/A")
-            logger.warning(
-                f"Skipping row for container {container_id_for_warn} due to mismatch in column count or missing data for selected columns."
-            )
+    for container in data:
+        row = [get_styled_value(h, container.get(k), args.no_trunc) for h, k in columns]
+        table.add_row(*row)
 
     console.print(table)
 
 
-def main():
-    parser = ArgumentParser(
-        "docker-ps-cli",
-        description="A Python wrapper for 'docker ps' with selectable columns, custom filtering, and rich output.",
-        epilog="Wrapper uses '--format json' internally for table output. '--find' filters results after fetching.",
-    )
-
-    parser.add_argument(
-        "-a",
-        "--all",
-        action="store_true",
-        help="Show all containers (default shows just running)",
-    )
-    parser.add_argument(
-        "-n",
-        "--last",
-        type=int,
-        default=None,
-        metavar="int",
-        help="Show n last created containers (includes all states). Mutually exclusive with -l.",
-    )
-    parser.add_argument(
-        "-l",
-        "--latest",
-        action="store_true",
-        help="Show the latest created container (includes all states). Mutually exclusive with -n.",
-    )
-    parser.add_argument(
-        "--no-trunc",
-        action="store_true",
-        help="Don't truncate output from docker (passed to docker). Affects Command, Names etc. Full ID is always available internally.",
-    )
-    parser.add_argument(
-        "--style",
-        action="store",
-        help="Table style to print.",
-        choices=(
-            "ascii",
-            "minimal",
-            "rounded",
-            "simple",
-            "square",
-        ),
-        default="rounded",
-        type=str,
-    )
-
-    parser_filter_help = """
-Filter output using docker's built-in filters. Can be used multiple flags (-f "k=v" -f "k2=v2") or as comma-separated values (--filter "k=v,k2=v2").
-Format: key=value. Supported keys:
-  id            Container's ID
-  name          Container's name (substring match)
-  label         Arbitrary string (e.g., 'label=color' or 'label=color=blue')
-  exited        Container's exit code (e.g., 'exited=0', 'exited=137')
-  status        One of: created, restarting, running, removing, paused, exited, dead
-  ancestor      Filters containers which share a given image/ID/digest as an ancestor. (e.g., 'ubuntu', 'ubuntu:24.04', '<image id>')
-  before, since Container ID or name (filters containers created before/after)
-  volume        Volume name or mount path
-  network       Network name or ID
-  publish, expose Port number, range, and/or protocol (e.g., '80', '8000-8080/tcp')
-  health        One of: starting, healthy, unhealthy, none
-  isolation     Windows daemon only: default, process, hyperv
-  is-task       Boolean: true or false (filters containers that are a "task" for a service)
-Example: --filter "status=running,name=web-*" OR -f "status=running" -f "name=web-*"
-"""
-
-    parser.add_argument(
-        "--filter",
-        action="append",
-        default=[],
-        type=comma_separated_list,
-        metavar="filter",
-        help=parser_filter_help,
-    )
-
-    parser.add_argument(
-        "-f",
-        "--find",
-        type=str,
-        default=None,
-        metavar='"key=pattern,key2=pattern2..."',
-        help="Filter results using key=pattern pairs processed by the wrapper AFTER fetching data from docker. "
-        "Supports glob (*) patterns in pattern (fnmatch). Case-insensitive substring match otherwise. "
-        "Multiple conditions can be space or comma separated. "
-        "Keys match display headers (e.g., 'Names', 'Status') or raw JSON keys. "
-        "Example: '--find \"Status=running,Names=web-*\"' OR '--find \"Status=exited Image=ubuntu\"'",
-    )
-
-    column_group = parser.add_argument_group(
-        "Displayed Columns",
-        "Control which columns are displayed. By default, all default columns are shown. "
-        "Using any --<column-name> flag will display ONLY the specified columns. "
-        "--no-<column-name> flags hide the specified columns from the resulting list (default or explicitly shown).",
-    )
-
-    for header in DISPLAY_HEADERS:
-        flag_name = HEADER_TO_FLAG_NAME_MAP.get(header, header.lower())
-        dest_name = f"show_{flag_name}"
-        help_text = f"Show the {header} column."
-
-        column_group.add_argument(
-            f"--{flag_name}",
-            dest=dest_name,
-            action=BooleanOptionalAction,
-            default=None,
-            help=help_text,
-        )
-
-    parser.add_argument(
-        "--hide-column",
-        action="append",
-        default=[],
-        type=comma_separated_list,
-        metavar="COLUMN",
-        help="Hide specific columns from the output. Can be used multiple times or with comma-separated values (e.g., --hide-column Ports,Size). "
-        "Column names match display headers.",
-    )
-
-    output_options_group = parser.add_argument_group("General Output")
-    output_options_group.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Only display container IDs (passes -q to docker, ignores column selection and --find).",
-    )
-
-    parser.formatter_class = RawTextHelpFormatter
-
-    args = parser.parse_args()
-
-    logger.debug(f"Parsed arguments: {args}")
-
+def main() -> None:  # noqa: C901
     if args.last is not None and args.latest:
-        logger.error(
-            "[red]Error: Cannot specify both --last (-n) and --latest (-l).[/red]"
-        )
+        logger.error("[red]Cannot use both --last and --latest[/red]")
         sys.exit(1)
 
     if args.quiet:
-        logger.info("Running in quiet mode (-q).")
-        docker_cmd_quiet = ["docker", "ps", "-q"]
+        cmd = ["docker", "ps", "-q"]
+        for arg in (
+            args.all, args.last, args.latest, args.no_trunc, args.show_size    
+        ):
+            if arg:
+                cmd.append(ARG_MAPPING.get(str(arg)))
 
-        if args.all:
-            docker_cmd_quiet.append("-a")
-        if args.last is not None and args.last >= 0:
-            docker_cmd_quiet.extend(["-n", str(args.last)])
-        if args.latest:
-            docker_cmd_quiet.append("-l")
+        if args.last is not None:
+            cmd.append("-n %d" % args.last)
 
-        if args.no_trunc:
-            docker_cmd_quiet.append("--no-trunc")
-
-        if getattr(args, "show_size", None) is True:
-            docker_cmd_quiet.append("-s")
-
-        all_filters_quiet = (
-            [item for sublist in args.filter for item in sublist] if args.filter else []
-        )
-        for f in all_filters_quiet:
-            docker_cmd_quiet.extend(["-f", f])
-
-        if args.find:
-            logger.warning("Ignoring --find filter in --quiet (-q) mode.")
+        if args.filter:
+            for item in args.filter:
+                cmd.extend(["-f", item])
 
         try:
-            logger.debug(f"Executing quiet command: {' '.join(docker_cmd_quiet)}")
-            result = subprocess.run(
-                docker_cmd_quiet,
-                capture_output=True,
-                text=True,
-                check=True,
-                encoding="utf-8",
-            )
-
-            output_lines = result.stdout.strip().splitlines()
-            if not output_lines:
-                logger.info("[yellow]No containers found.[/yellow]")
-            else:
-                for line in output_lines:
-                    console.print(line)
-
-            sys.exit(0)
-
-        except FileNotFoundError:
-            logger.error("Docker command not found.", exc_info=True)
-            console.print(
-                Panel(
-                    "[red]Error: 'docker' command not found.[/red]\n"
-                    "Please ensure Docker is installed and accessible in your system's PATH.",
-                    title="[bold red]Command Not Found[/bold red]",
-                    expand=False,
-                )
-            )
-            sys.exit(1)
-        except subprocess.CalledProcessError as e:
-            logger.error(
-                f"Docker command failed with exit code {e.returncode}", exc_info=True
-            )
-            console.print(
-                Panel(
-                    f"[red]Error executing docker command:[/red] {e}\n"
-                    f"[yellow]Stderr:[/yellow]\n{e.stderr.strip()}",
-                    title="[bold red]Docker Error[/bold red]",
-                    expand=False,
-                )
-            )
-            sys.exit(1)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            print(result.stdout.strip())
         except Exception as e:
-            logger.error(
-                "An unexpected error occurred during quiet execution.", exc_info=True
-            )
-            console.print(
-                Panel(
-                    f"[red]An unexpected error occurred:[/red] {e}",
-                    title="[bold red]Unexpected Error[/bold red]",
-                    expand=False,
-                )
-            )
+            console.print(Panel(str(e), title="Error"))
             sys.exit(1)
+        sys.exit(0)
 
-    logger.info("Running in table mode.")
-
-    column_configs_for_table = get_column_configs(args)
-    logger.debug(f"Columns determined for table: {column_configs_for_table}")
-
-    docker_cmd_json = ["docker", "ps", "--format", "json"]
-
-    if args.all:
-        docker_cmd_json.append("-a")
-
-    if args.last is not None and args.last >= 0:
-        docker_cmd_json.extend(["-n", str(args.last)])
-    if args.latest:
-        docker_cmd_json.append("-l")
-    if args.no_trunc:
-        docker_cmd_json.append("--no-trunc")
-
-    if any(header == "Size" for header, key in column_configs_for_table):
-        docker_cmd_json.append("-s")
-        logger.debug("Adding -s to docker command as Size column is displayed.")
-    else:
-        logger.debug("Size column not displayed, skipping -s for docker command.")
-
-    all_filters_json = (
-        [item for sublist in args.filter for item in sublist] if args.filter else []
-    )
-    for f in all_filters_json:
-        docker_cmd_json.extend(["-f", f])
-    logger.debug(f"Adding docker filters: {all_filters_json}")
-
-    containers_data: List[dict] = []
-    try:
-        logger.debug(f"Executing JSON command: {' '.join(docker_cmd_json)}")
-        result = subprocess.run(
-            docker_cmd_json,
-            capture_output=True,
-            text=True,
-            check=True,
-            encoding="utf-8",
-        )
-        json_output = result.stdout.strip()
-
-        if not json_output.strip():
-            logger.info("[yellow]No containers found matching docker filters.[/yellow]")
-
-        else:
-            logger.debug("Parsing JSON output from docker...")
-
-            for line in json_output.splitlines():
-                if line.strip():
-                    try:
-                        containers_data.append(json.loads(line))
-                    except json.JSONDecodeError as e:
-                        logger.error(f"Error parsing JSON line: {e}", exc_info=True)
-                        logger.error(f"Problematic line: {line}")
-                        console.print(
-                            Panel(
-                                f"[red]Error parsing JSON output from docker:[/red] {e}\n"
-                                f"[yellow]Problematic line:[/yellow] {line}",
-                                title="[bold red]JSON Parse Error[/bold red]",
-                                expand=False,
-                            )
-                        )
-                        sys.exit(1)
-            logger.debug(
-                f"Successfully parsed {len(containers_data)} container objects."
-            )
-
-    except FileNotFoundError:
-        logger.error("Docker command not found.", exc_info=True)
-        console.print(
-            Panel(
-                "[red]Error: 'docker' command not found.[/red]\n"
-                "Please ensure Docker is installed and accessible in your system's PATH.",
-                title="[bold red]Command Not Found[/bold red]",
-                expand=False,
-            )
-        )
-        sys.exit(1)
-    except subprocess.CalledProcessError as e:
-        logger.error(
-            f"Docker command failed with exit code {e.returncode}", exc_info=True
-        )
-        console.print(
-            Panel(
-                f"[red]Error executing docker command:[/red] {e}\n"
-                f"[yellow]Stderr:[/yellow]\n{e.stderr.strip()}",
-                title="[bold red]Docker Error[/bold red]",
-                expand=False,
-            )
-        )
-        sys.exit(1)
-    except Exception as e:
-        logger.error(
-            "An unexpected error occurred during JSON execution.", exc_info=True
-        )
-        console.print(
-            Panel(
-                f"[red]An unexpected error occurred:[/red] {e}",
-                title="[bold red]Unexpected Error[/bold red]",
-                expand=False,
-            )
-        )
-        sys.exit(1)
+    columns = get_column_configs(args, logger)
+    docker_cmd = build_docker_command(args, columns)
+    containers = run_docker_and_parse_json(docker_cmd)
 
     if args.find:
-        containers_data = filter_containers(containers_data, args.find)
-        if not containers_data:
-            logger.info(
-                "[yellow]No containers found matching wrapper --find criteria.[/yellow]"
-            )
+        containers = filter_containers(logger, containers, args.find)
+        if not containers:
+            logger.info("No containers matched find filters.")
             sys.exit(0)
 
-    print_containers_table(containers_data, args)
-
+    print_containers_table(containers)
     sys.exit(0)
 
 
