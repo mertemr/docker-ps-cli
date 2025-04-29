@@ -25,3 +25,6 @@ classifiers = [
 
 [project.scripts]
 docker-ps = "main:main"
+
+[tool.uv]
+package = true

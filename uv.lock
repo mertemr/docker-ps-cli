@@ -5,7 +5,7 @@ requires-python = ">=3.9"
 [[package]]
 name = "docker-ps-cli"
 version = "1.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "rich" },
 ]
