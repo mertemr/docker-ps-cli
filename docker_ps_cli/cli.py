@@ -155,7 +155,7 @@ def main() -> int:
     containers = result if isinstance(result, list) else []
 
     if args.find:
-        containers = filter_containers(logger, containers, args.find)
+        containers = filter_containers(containers, args.find)
 
     display_containers_table(containers, columns, args)
     return 0

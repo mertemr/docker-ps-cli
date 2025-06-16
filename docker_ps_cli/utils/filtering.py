@@ -1,10 +1,13 @@
 import fnmatch
+import logging
 import shlex
 
-from ..mappings import JSON_KEY_MAP
+from docker_ps_cli.config import JSON_KEY_MAP
+
+logger = logging.getLogger(__name__)
 
 
-def filter_containers(logger, containers: list[dict], find: str) -> list[dict]:
+def filter_containers(containers: list[dict], find: str) -> list[dict]:
     logger.debug(f"Filtering with: {find}")
     try:
         parts = shlex.split(find)

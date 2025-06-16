@@ -1,7 +1,7 @@
 import logging
 from argparse import Namespace
 
-from docker_ps_cli.mappings import (
+from docker_ps_cli.config import (
     DEFAULT_COLUMNS,
     DISPLAY_HEADERS,
     HEADER_TO_FLAG_NAME_MAP,
