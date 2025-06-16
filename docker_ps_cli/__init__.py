@@ -1,4 +1,4 @@
-from .mappings import (
+from .config import (
     ARG_MAPPING,
     DEFAULT_COLUMNS,
     DISPLAY_HEADERS,
@@ -13,6 +13,7 @@ from .utils.logger import setup_logging
 from .utils.styling import get_styled_value
 
 __all__ = (
+    "ARG_MAPPING",
     "DEFAULT_COLUMNS",
     "DISPLAY_HEADERS",
     "HEADER_TO_FLAG_NAME_MAP",

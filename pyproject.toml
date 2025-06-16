@@ -1,6 +1,6 @@
 [project]
 name = "docker-ps-cli"
-version = "1.0.0"
+version = "1.0.1"
 description = "List your docker containers in a better way!"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,6 +17,13 @@ authors = [
 keywords = ["docker", "cli", "containers"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Topic :: Utilities",
 ]
 
 [project.urls]
@@ -24,7 +31,7 @@ classifiers = [
 "Bug Tracker" = "https://github.com/mertemr/docker-ps-cli/issues"
 
 [project.scripts]
-docker-ps-cli = "docker_ps_cli.main:main"
+docker-ps-cli = "docker_ps_cli.__main__:main"
 
 [tool.uv]
 package = true
@@ -43,7 +50,7 @@ preview = true
 
 [tool.ruff.lint]
 select = ["B","C90","E","F","I","TRY","ANN","N"]
-ignore = []
+ignore = ["TRY400"]
 
 [dependency-groups]
 dev = [

@@ -1,95 +1,140 @@
 # docker-ps-cli
 
-A simple command-line tool to display running Docker containers in a cleaner and more readable format.
-
-## Development
-
-This project is under development and will continue to improve in future releases.
+A simple and powerful command-line tool to display running Docker containers in a cleaner and more readable format.
 
 ## Features
 
-- Lists active Docker containers
-- Clean and user-friendly output
-- Lightweight CLI tool
+- **Enhanced Docker Container Listing**: Provides a user-friendly and customizable output for `docker ps`.
+- **Selectable Columns**: Choose which container details to display.
+- **Advanced Filtering**: Filter containers using Docker's built-in filters or custom patterns.
+- **Customizable Styles**: Display container information in various table styles.
+- **Lightweight and Fast**: Built with performance in mind.
 
 ## Installation
 
-You can download the latest `.whl` file from the [Releases](https://github.com/mertemr/docker-ps-cli/releases) page.
+Install the package via pip:
 
-To install the `.whl` file:
+```bash
+pip install docker-ps-cli
+```
+
+Alternatively, download the latest `.whl` file from the [Releases](https://github.com/mertemr/docker-ps-cli/releases) page and install it:
 
 ```bash
 pip install docker_ps_cli-1.0.0-py3-none-any.whl
 ```
 
+## Requirements
+
+- Python 3.9 or higher
+
+
 ## Usage
 
-`$ docker-ps-cli -h`
+Run the following command to see available options:
 
 ```bash
-usage: docker-ps-cli [-h] [-a] [-n int] [-l] [--no-trunc]
-                     [--style {ascii,minimal,rounded,simple,square}]
-                     [--log-level {DEBUG,INFO,WARNING,ERROR}] [--filter filter]
-                     [-f "key=pattern,key2=pattern2..."] [--id | --no-id]
-                     [--image | --no-image] [--command | --no-command]
-                     [--created | --no-created] [--status | --no-status]
-                     [--port | --no-port] [--name | --no-name] [--size | --no-size]
-                     [--health | --no-health] [--label | --no-label]
-                     [--hide-column COLUMN] [-q]
+docker-ps-cli [-h] [-a] [-n NUM] [-l] [-f KEY=VALUE] [--find 'KEY=PATTERN'] [--id | --no-id]
+[--image | --no-image] [--command | --no-command] [--created | --no-created]
+[--status | --no-status] [--port | --no-port] [--name | --no-name] [--size | --no-size]
+[--health | --no-health] [--label | --no-label] [--columns COLS] [--hide-column COLS]
+[-q] [--no-trunc] [--style {ascii,minimal,rounded,simple,square}] [--show-lines]
+[--log-level {DEBUG,INFO,WARNING,ERROR}]
 
-A Python wrapper for 'docker ps' with selectable columns, custom filtering, and rich output.
+A Python wrapper for 'docker ps' with rich filtering and column selection.
 
 optional arguments:
-  -h, --help            show this help message and exit
-  -a, --all             Show all containers (default shows just running)
-  -n int, --last int    Show n last created containers (includes all states). Mutually exclusive with -l.
-  -l, --latest          Show the latest created container (includes all states). Mutually exclusive with -n.
-  --no-trunc            Don't truncate output from docker (passed to docker). Affects Command, Names etc. Full ID is always available internally.
-  --style {ascii,minimal,rounded,simple,square}
-                        Table style to print.
-  --log-level {DEBUG,INFO,WARNING,ERROR}
-                        Log level
-  --filter filter       
-                        Filter output using docker's built-in filters. Can be used multiple flags (-f "k=v" -f "k2=v2") or as comma-separated values (--filter "k=v,k2=v2").
-                        Format: key=value. Supported keys:
-                        id            Container's ID
-                        name          Container's name (substring match)
-                        label         Arbitrary string (e.g., 'label=color' or 'label=color=blue')
-                        exited        Container's exit code (e.g., 'exited=0', 'exited=137')
-                        status        One of: created, restarting, running, removing, paused, exited, dead
-                        ancestor      Filters containers which share a given image/ID/digest as an ancestor. (e.g., 'ubuntu', 'ubuntu:24.04', '<image id>')
-                        before, since Container ID or name (filters containers created before/after)
-                        volume        Volume name or mount path
-                        network       Network name or ID
-                        publish, expose Port number, range, and/or protocol (e.g., '80', '8000-8080/tcp')
-                        health        One of: starting, healthy, unhealthy, none
-                        isolation     Windows daemon only: default, process, hyperv
-                        is-task       Boolean: true or false (filters containers that are a "task" for a service)
-                        Example: --filter "status=running,name=web-*" OR -f "status=running" -f "name=web-*"
-  -f "key=pattern,key2=pattern2...", --find "key=pattern,key2=pattern2..."
-                        Filter results using key=pattern pairs processed by the wrapper AFTER fetching data from docker. Supports glob (*) patterns in pattern (fnmatch). Case-insensitive substring match otherwise. Multiple conditions can be space or comma separated. Keys match display headers (e.g., 'Names', 'Status') or raw JSON keys. Example: '--find "Status=running,Names=web-*"' OR '--find "Status=exited Image=ubuntu"'
-  --hide-column COLUMN  Hide specific columns from the output. Can be used multiple times or with comma-separated values (e.g., --hide-column Ports,Size). Column names match display headers.
+-h, --help            show this help message and exit
 
-Displayed Columns:
-  Control which columns are displayed. By default, all default columns are shown. Using any --<column-name> flag will display ONLY the specified columns. --no-<column-name> flags hide the specified columns from the resulting list (default or explicitly shown).
+Container Selection:
+-a, --all             Show all containers (default shows running only).
+-n NUM, --last NUM    Show the last NUM created containers.
+-l, --latest          Show the latest created container (mutually exclusive with -n).
 
-  --id, --no-id         Show the ID column.
-  --image, --no-image   Show the Image column.
-  --command, --no-command
-                        Show the Command column.
-  --created, --no-created
-                        Show the Created column.
-  --status, --no-status
-                        Show the Status column.
-  --port, --no-port     Show the Ports column.
-  --name, --no-name     Show the Names column.
-  --size, --no-size     Show the Size column.
-  --health, --no-health
-                        Show the Health column.
-  --label, --no-label   Show the Labels column.
+Filtering:
+-f KEY=VALUE, --filter KEY=VALUE
+Filter output using Docker's native filters. Can be used multiple times. Common keys:
+status, name, label, ancestor, network, health. Example: -f 'status=exited' -f
+'name=web*'
+--find 'KEY=PATTERN'  Filter results *after* fetching from Docker. Supports glob patterns (*). Keys match
+column headers (e.g., 'Names', 'Image'). Case-insensitive. Example: --find
+'Names=api-* Image=*ubuntu*'
 
-General Output:
-  -q, --quiet           Only display container IDs (passes -q to docker, ignores column selection and --find).
+Column Control:
+Control which columns are displayed. Using any --<column> flag will show ONLY the specified columns.
+Using --no-<column> will hide that column from the default view.
 
-Wrapper uses '--format json' internally for table output. '--find' filters results after fetching.
+--id, --no-id         Show/hide the ID column.
+--image, --no-image   Show/hide the Image column.
+--command, --no-command
+Show/hide the Command column.
+--created, --no-created
+Show/hide the Created column.
+--status, --no-status
+Show/hide the Status column.
+--port, --no-port     Show/hide the Ports column.
+--name, --no-name     Show/hide the Names column.
+--size, --no-size     Show/hide the Size column.
+--health, --no-health
+Show/hide the Health column.
+--label, --no-label   Show/hide the Labels column.
+
+Output and Column Control:
+--columns COLS        Comma-separated list of columns to display. Example: --columns ID,Image,Names,Status
+--hide-column COLS    Comma-separated list of columns to hide from the output.
+-q, --quiet           Only display container IDs (ignores formatting and --find).
+
+Styling:
+--no-trunc            Don't truncate output (affects Command, Image, etc.).
+--style {ascii,minimal,rounded,simple,square}
+Table border style to use. (default: rounded)
+--show-lines          Show horizontal lines in the table. (default: True)
+
+General:
+--log-level {DEBUG,INFO,WARNING,ERROR}
+Set the logging level. (default: WARNING)
 ```
+
+### Example Commands
+
+- List all running containers:
+
+```bash
+docker-ps-cli
+```
+
+- Show all containers (including stopped ones):
+
+```bash
+docker-ps-cli -a
+```
+
+- Display containers with specific columns:
+
+```bash
+docker-ps-cli --id --name --status
+```
+
+- Filter containers by status:
+
+```bash
+docker-ps-cli --filter "status=running"
+```
+
+- Use custom table styles:
+
+```bash
+docker-ps-cli --style rounded
+```
+
+## Development
+
+This project is actively maintained and welcomes contributions. Feel free to open issues or submit pull requests on the [GitHub repository](https://github.com/mertemr/docker-ps-cli).
+
+## Contributors
+
+I appreciate all contributions to this project. If you find bugs or have suggestions, please open an issue or submit a pull request.
+
+## License
+
+This project is licensed under the GPL-3.0-or-later license. See the [LICENSE](LICENSE) file for details.

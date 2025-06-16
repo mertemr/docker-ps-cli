@@ -1,6 +1,6 @@
 from rich.text import Text
 from typing import Optional, Union
-from ..mappings import STATIC_STYLE_MAP
+from docker_ps_cli.config import STATIC_STYLE_MAP
 
 
 def style_status(value: str) -> Text:
