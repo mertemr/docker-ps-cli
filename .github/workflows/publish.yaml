@@ -1,0 +1,61 @@
+name: Publish UV
+
+on:
+  push:
+    tags:
+      - "v*"
+
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install the project
+        run: uv sync --locked
+
+      - name: Build the project
+        id: build
+        run: uv build
+
+      - name: Version extraction
+        id: version_extraction
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
+      - name: Create release
+        uses: actions/create-release@v1.1.4
+        id: create_release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+
+      - name: Upload release assets
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/docker_ps_cli-${{ steps.version_extraction.outputs.VERSION }}-py3-none-any.whl
+          asset_name: docker_ps_cli-${{ steps.version_extraction.outputs.VERSION }}-py3-none-any.whl
+          asset_content_type: application/octet-stream
+
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@v1.12.4
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: ./dist
+          skip-existing: true
