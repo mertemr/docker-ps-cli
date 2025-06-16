@@ -1,6 +1,6 @@
 [project]
 name = "docker-ps-cli"
-version = "1.0.0"
+version = "1.0.1"
 description = "List your docker containers in a better way!"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,6 +17,13 @@ authors = [
 keywords = ["docker", "cli", "containers"]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Topic :: Utilities",
 ]
 
 [project.urls]
