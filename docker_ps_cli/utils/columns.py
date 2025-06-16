@@ -1,9 +1,17 @@
-from ..mappings import DEFAULT_COLUMNS, DISPLAY_HEADERS, HEADER_TO_FLAG_NAME_MAP, JSON_KEY_MAP
+import logging
+from argparse import Namespace
+
+from docker_ps_cli.mappings import (
+    DEFAULT_COLUMNS,
+    DISPLAY_HEADERS,
+    HEADER_TO_FLAG_NAME_MAP,
+    JSON_KEY_MAP,
+)
+
+logger = logging.getLogger(__name__)
 
 
-def get_column_configs(args, logger) -> list[tuple[str, str]]:
-    logger.debug("Determining column configuration...")
-
+def get_column_configs(args: Namespace) -> list[tuple[str, str]]:
     shown, hidden, unspecified = [], [], []
     for header in DISPLAY_HEADERS:
         flag = HEADER_TO_FLAG_NAME_MAP.get(header, header.lower())
@@ -15,7 +23,9 @@ def get_column_configs(args, logger) -> list[tuple[str, str]]:
         else:
             unspecified.append(header)
 
-    base = list(dict.fromkeys(shown)) if shown else list(DEFAULT_COLUMNS)
+    base = list(DEFAULT_COLUMNS)
+    base.extend(shown)
+
     hide_list = {h.lower() for h in hidden}
     hide_list.update({c.strip().lower() for g in (args.hide_column or []) for c in g})
 

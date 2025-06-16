@@ -1,3 +1,7 @@
+"""
+Centralized configuration, constants, and mappings for docker-ps-cli.
+"""
+
 DISPLAY_HEADERS = [
     "ID",
     "Image",
@@ -71,5 +75,5 @@ ARG_MAPPING = {
     "all": "-a",
     "latest": "-l",
     "no_trunc": "--no-trunc",
-    "show_size": "-s"
+    "show_size": "-s",
 }
